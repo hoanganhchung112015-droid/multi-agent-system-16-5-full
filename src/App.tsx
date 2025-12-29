@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -18,7 +17,6 @@ interface DiaryEntry {
 }
 
 // --- CONTROLLER LAYER: Custom Hook to manage Agent Logic ---
-// Tách biệt hoàn toàn logic nghiệp vụ khỏi UI
 const useAgentSystem = (selectedSubject: Subject | null) => {
   const [allResults, setAllResults] = useState<Partial<Record<AgentType, string>>>({});
   const [allAudios, setAllAudios] = useState<Partial<Record<AgentType, string>>>({});
@@ -47,18 +45,15 @@ const useAgentSystem = (selectedSubject: Subject | null) => {
     setLoading(true);
     setLoadingStatus(`Đang gọi chuyên gia ${primaryAgent}...`);
 
-    // Helper function to process single agent
     const processAgent = async (agent: AgentType) => {
       try {
         const res = await processTask(selectedSubject, agent, voiceText, image || undefined);
         setAllResults(prev => ({ ...prev, [agent]: res }));
 
-        // Special handling for SPEED agent
         if (agent === AgentType.SPEED) {
           try {
             const parsed = JSON.parse(res);
             setParsedSpeedResult(parsed);
-            // Generate related data asynchronously
             generateSimilarQuiz(parsed.finalAnswer).then(q => q && setQuiz(q));
             generateSummary(parsed.finalAnswer).then(sum => sum && fetchTTSAudio(sum).then(aud => aud && setAllAudios(p => ({...p, [agent]: aud}))));
           } catch (e) {
@@ -66,7 +61,6 @@ const useAgentSystem = (selectedSubject: Subject | null) => {
              setAllResults(prev => ({ ...prev, [agent]: "Lỗi định dạng dữ liệu từ chuyên gia Speed." }));
           }
         } else {
-           // Other agents
            generateSummary(res).then(sum => sum && fetchTTSAudio(sum).then(aud => aud && setAllAudios(p => ({...p, [agent]: aud}))));
         }
       } catch (error) {
@@ -74,11 +68,9 @@ const useAgentSystem = (selectedSubject: Subject | null) => {
       }
     };
 
-    // 1. Run Primary Agent First (Priority)
     await processAgent(primaryAgent);
-    setLoading(false); // UI Interactive immediately after primary agent
+    setLoading(false);
 
-    // 2. Run Background Agents (Parallel) - "Non-blocking"
     const others = allAgents.filter(a => a !== primaryAgent);
     Promise.allSettled(others.map(processAgent));
 
@@ -112,18 +104,15 @@ const App: React.FC = () => {
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<AgentType>(AgentType.SPEED);
   
-  // Input State
   const [image, setImage] = useState<string | null>(null);
   const [voiceText, setVoiceText] = useState('');
   const [quizAnswered, setQuizAnswered] = useState<string | null>(null);
   const [diaryEntries, setDiaryEntries] = useState<DiaryEntry[]>([]);
   
-  // UI Interaction State
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const [isCurrentResultSaved, setIsCurrentResultSaved] = useState(false);
 
-  // Camera State
   const [capturedImagePreview, setCapturedImagePreview] = useState<string | null>(null);
   const [isImageCaptured, setIsImageCaptured] = useState<boolean>(false);
   const [showCamera, setShowCamera] = useState(false);
@@ -131,7 +120,6 @@ const App: React.FC = () => {
   const [countdown, setCountdown] = useState(10);
   const [isRecording, setIsRecording] = useState(false);
 
-  // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -140,7 +128,6 @@ const App: React.FC = () => {
 
   const agents = useMemo(() => Object.values(AgentType), []);
 
-  // Use the Controller Hook
   const { 
     allResults, allAudios, parsedSpeedResult, loading, loadingStatus, quiz, 
     resetResults, runAgents 
@@ -158,7 +145,6 @@ const App: React.FC = () => {
     }
   }, [showSaveSuccess]);
 
-  // Audio Cleanup
   useEffect(() => {
     return () => {
       if (audioSourceRef.current) {
@@ -301,7 +287,6 @@ const App: React.FC = () => {
     setIsCurrentResultSaved(true);
   }, [selectedSubject, allResults, selectedAgent, isCurrentResultSaved, parsedSpeedResult, voiceText, image, diaryEntries]);
 
-  // Optimize Markdown Render Config
   const markdownConfig = useMemo(() => ({
     remarkPlugins: [remarkMath],
     rehypePlugins: [rehypeKatex]
@@ -350,33 +335,37 @@ const App: React.FC = () => {
             {isImageCaptured ? (
               <>
                 <div className="flex flex-col items-center group">
+                  <span className="text-[9px] font-black uppercase mb-2 text-red-500 opacity-60">Chụp lại</span>
                   <button onClick={handleRetakePhoto} className="w-16 h-16 rounded-3xl bg-red-500 text-white shadow-lg active:scale-90 flex items-center justify-center hover:bg-red-600 transition-colors" aria-label="Chụp lại">
                     <span className="text-2xl">🔄</span>
                   </button>
-                  <span className="text-[10px] font-black uppercase mt-3 text-red-500 opacity-60 group-hover:opacity-100">Chụp lại</span>
                 </div>
                 <div className="flex flex-col items-center group">
+                  <span className="text-[9px] font-black uppercase mb-2 text-emerald-500 opacity-60">Lưu ảnh</span>
                   <button onClick={handleSaveCapturedPhoto} className="w-16 h-16 rounded-3xl bg-emerald-500 text-white shadow-lg active:scale-90 flex items-center justify-center hover:bg-emerald-600 transition-colors" aria-label="Lưu ảnh">
                     <span className="text-2xl">✅</span>
                   </button>
-                  <span className="text-[10px] font-black uppercase mt-3 text-emerald-500 opacity-60 group-hover:opacity-100">Lưu</span>
                 </div>
               </>
             ) : (
               <>
-                {[{ l: 'Camera', i: '📸', a: startCamera }, { l: 'Thư viện', i: '🖼️', a: () => fileInputRef.current?.click() }, { l: isRecording ? 'Dừng' : 'Ghi âm', i: isRecording ? '⏹️' : '🎙️', a: () => toggleRecording() }].map((it) => (
+                {[
+                  { l: 'Bấm chụp đề', i: '📸', a: startCamera }, 
+                  { l: 'Tải ảnh lên', i: '🖼️', a: () => fileInputRef.current?.click() }, 
+                  { l: isRecording ? 'Dừng' : 'Bấm ghi âm', i: isRecording ? '⏹️' : '🎙️', a: () => toggleRecording() }
+                ].map((it) => (
                   <div key={it.l} className="flex flex-col items-center group">
+                    <span className="text-[9px] font-black uppercase mb-2 text-blue-600 opacity-60 group-hover:opacity-100 transition-opacity whitespace-nowrap">{it.l}</span>
                     <button onClick={it.a} className="w-16 h-16 rounded-3xl bg-blue-600 text-white shadow-lg active:scale-90 flex items-center justify-center hover:bg-blue-700 transition-colors" aria-label={it.l}>
                       <span className="text-2xl">{it.i}</span>
                     </button>
-                    <span className="text-[10px] font-black uppercase mt-3 text-blue-600 opacity-60 group-hover:opacity-100">{it.l}</span>
                   </div>
                 ))}
                 <div className="flex flex-col items-center group">
+                  <span className="text-[9px] font-black uppercase mb-2 text-blue-600 opacity-60 group-hover:opacity-100 transition-opacity whitespace-nowrap">Bấm giải bài</span>
                   <button onClick={handleRunAnalysis} disabled={(!image && !voiceText) || isImageCaptured} className="w-16 h-16 rounded-3xl bg-blue-600 text-white shadow-lg active:scale-90 flex items-center justify-center hover:bg-blue-700 transition-colors disabled:opacity-30 disabled:pointer-events-none" aria-label="Thực hiện">
                     <span className="text-2xl">🚀</span>
                   </button>
-                  <span className="text-[10px] font-black uppercase mt-3 text-blue-600 opacity-60 group-hover:opacity-100">Thực hiện</span>
                 </div>
               </>
             )}
