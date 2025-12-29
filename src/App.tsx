@@ -128,7 +128,7 @@ const App: React.FC = () => {
   const [isImageCaptured, setIsImageCaptured] = useState<boolean>(false);
   const [showCamera, setShowCamera] = useState(false);
   const [isCounting, setIsCounting] = useState(false);
-  const [countdown, setCountdown] = useState(3);
+  const [countdown, setCountdown] = useState(10);
   const [isRecording, setIsRecording] = useState(false);
 
   // Refs
