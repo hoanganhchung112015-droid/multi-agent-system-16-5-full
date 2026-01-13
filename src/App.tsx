@@ -1,38 +1,62 @@
-// Tìm đến hàm runAgents trong App.tsx và thay thế bằng:
-const runAgents = useCallback(async (
-  primaryAgent: AgentType,
-  allAgents: AgentType[],
-  voiceText: string,
-  image: string | null
-) => {
-  if (!selectedSubject || (!image && !voiceText)) return;
+import React, { useState, useCallback } from 'react';
+import { Subject, AgentType } from './types';
+import { processTask } from './services/geminiService';
 
-  setLoading(true);
-  setLoadingStatus(`Đang kết nối chuyên gia ${primaryAgent}...`);
+// Giả sử đây là bên trong Component App
+export default function App() {
+  const [selectedSubject, setSelectedSubject] = useState<Subject>(Subject.MATH);
+  const [loading, setLoading] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState('');
+  const [allResults, setAllResults] = useState<Partial<Record<AgentType, string>>>({});
+  const [parsedSpeedResult, setParsedSpeedResult] = useState<any>(null);
 
-  const processAgent = async (agent: AgentType) => {
-    try {
-      const res = await processTask(selectedSubject, agent, voiceText, image || undefined);
-      
-      // Nếu là Agent SPEED, ta thực hiện phân tách JSON và chuẩn bị Quiz
-      if (agent === AgentType.SPEED) {
-        const jsonMatch = res.match(/\{[\s\S]*\}/); // Trích xuất JSON nếu AI trả lời thừa chữ
-        const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : res);
-        setParsedSpeedResult(parsed);
-        setAllResults(prev => ({ ...prev, [agent]: parsed.finalAnswer }));
-      } else {
-        setAllResults(prev => ({ ...prev, [agent]: res }));
+  const runAgents = useCallback(async (
+    primaryAgent: AgentType,
+    allAgents: AgentType[],
+    voiceText: string,
+    image: string | null
+  ) => {
+    if (!selectedSubject || (!image && !voiceText)) return;
+
+    setLoading(true);
+    setAllResults({}); // Xóa kết quả cũ khi bắt đầu lượt mới
+    setLoadingStatus(`Đang kết nối chuyên gia ${primaryAgent}...`);
+
+    const callSingleAgent = async (agent: AgentType) => {
+      try {
+        const res = await processTask(selectedSubject, agent, voiceText, image || undefined);
+        
+        if (agent === AgentType.SPEED) {
+          // Xử lý JSON từ Agent giải nhanh
+          try {
+            const jsonMatch = res.match(/\{[\s\S]*\}/);
+            const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : res);
+            setParsedSpeedResult(parsed);
+            setAllResults(prev => ({ ...prev, [agent]: parsed.finalAnswer }));
+          } catch (e) {
+            setAllResults(prev => ({ ...prev, [agent]: res }));
+          }
+        } else {
+          setAllResults(prev => ({ ...prev, [agent]: res }));
+        }
+      } catch (error) {
+        setAllResults(prev => ({ ...prev, [agent]: "Chuyên gia đang bận, vui lòng thử lại." }));
       }
-    } catch (error) {
-      setAllResults(prev => ({ ...prev, [agent]: "Chuyên gia bận, hãy thử lại." }));
-    }
-  };
+    };
 
-  await processAgent(primaryAgent); // Ưu tiên Agent chính
-  setLoading(false);
+    // 1. Chạy Agent ưu tiên trước và đợi kết quả
+    await callSingleAgent(primaryAgent);
+    setLoading(false);
 
-  // Chạy các Agent còn lại ngầm
-  const others = allAgents.filter(a => a !== primaryAgent);
-  others.forEach(processAgent);
+    // 2. Chạy các Agent còn lại song song (Background) để tiết kiệm thời gian
+    const otherAgents = allAgents.filter(a => a !== primaryAgent);
+    otherAgents.forEach(agent => callSingleAgent(agent));
 
-}, [selectedSubject]);
+  }, [selectedSubject]);
+
+  // ... các phần còn lại của Component
+  return (
+    // JSX của bạn ở đây
+    <div>Symbiotic AI</div>
+  );
+}
