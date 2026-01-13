@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { Layout } from '../components/Layout';
 import CameraScanner from '../components/CameraScanner';
-import { Subject, AgentType } from './types';
+import { Subject, AgentType } from '../types';
 import { processTask } from '../services/geminiService';
 import { 
   Camera, 
