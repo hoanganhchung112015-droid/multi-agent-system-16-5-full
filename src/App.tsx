@@ -1,41 +1,49 @@
-const runAgents = useCallback(async (primaryAgent: AgentType, allAgents: AgentType[], voiceText: string, image: string | null) => {
+// Trong App.tsx - Hàm xử lý chính
+const runAgents = useCallback(async (primary: AgentType, all: AgentType[], text: string, img: string | null) => {
   if (!selectedSubject) return;
   setLoading(true);
   
   try {
-    // BƯỚC 1: ƯU TIÊN SINH TỒN - Chạy Giải nhanh hoặc Gia sư trước
-    // Chúng ta chọn Agent quan trọng nhất để thông mạch đầu tiên
-    setLoadingStatus("Đang ưu tiên giải nhanh...");
+    // --- GIAI ĐOẠN 1: GIẢI NHANH 1S & GIA SƯ AI (Ưu tiên sống sót) ---
+    setLoadingStatus("Đang ưu tiên Giải nhanh...");
     
-    const firstResult = await processTask(selectedSubject, primaryAgent, voiceText, image || undefined);
-    
-    // Cập nhật kết quả ngay để người dùng thấy "thông mạch"
-    if (primaryAgent === AgentType.SPEED) {
+    // Gọi API trực tiếp qua fetch (Thông mạch, không dùng thư viện lỗi)
+    const res1 = await fetch('/api/gemini', {
+      method: 'POST',
+      body: JSON.stringify({ subject: selectedSubject, agent: primary, prompt: text, image: img })
+    }).then(r => r.text());
+
+    // Xử lý hiển thị ngay kết quả ưu tiên
+    if (primary === AgentType.SPEED) {
       try {
-        const parsed = JSON.parse(firstResult);
-        setParsedSpeedResult({ finalAnswer: parsed.finalAnswer, casioSteps: "" });
-        setAllResults(prev => ({ ...prev, [primaryAgent]: parsed.finalAnswer }));
+        const parsed = JSON.parse(res1);
+        setParsedSpeedResult({ finalAnswer: parsed.finalAnswer, casioSteps: "" }); // Đã bỏ Casio
+        setAllResults(prev => ({ ...prev, [primary]: parsed.finalAnswer }));
       } catch {
-        setAllResults(prev => ({ ...prev, [primaryAgent]: firstResult }));
+        setAllResults(prev => ({ ...prev, [primary]: res1 }));
       }
     } else {
-      setAllResults(prev => ({ ...prev, [primaryAgent]: firstResult }));
+      setAllResults(prev => ({ ...prev, [primary]: res1 }));
     }
 
-    // Tắt loading chính vì đã có kết quả quan trọng nhất
+    // Đã thông mạch luồng chính - Tắt loading để người dùng xem bài
     setLoading(false);
 
-    // BƯỚC 2: HẬU CẦN - Kích hoạt Luyện Skill (Chạy ngầm sau khi luồng 1 đã xong)
-    const skillAgent = AgentType.PERPLEXITY; // Giả sử đây là luồng Luyện Skill
-    if (allAgents.includes(skillAgent)) {
-      setLoadingStatus("Đang chuẩn bị bài luyện tập...");
-      const skillResult = await processTask(selectedSubject, skillAgent, voiceText, image || undefined);
-      setAllResults(prev => ({ ...prev, [skillAgent]: skillResult }));
+    // --- GIAI ĐOẠN 2: LUYỆN SKILL (Tiếp sức hậu cần) ---
+    // Chỉ chạy khi luồng chính đã về đích an toàn
+    const skillAgent = AgentType.PERPLEXITY; 
+    if (all.includes(skillAgent)) {
+      setLoadingStatus("Đang chuẩn bị Luyện Skill...");
+      const res2 = await fetch('/api/gemini', {
+        method: 'POST',
+        body: JSON.stringify({ subject: selectedSubject, agent: skillAgent, prompt: text, image: img })
+      }).then(r => r.text());
+      
+      setAllResults(prev => ({ ...prev, [skillAgent]: res2 }));
     }
 
   } catch (error) {
-    console.error("Mạch bị nghẽn:", error);
     setLoading(false);
-    setLoadingStatus("Mạch bận, vui lòng thử lại sau.");
+    setLoadingStatus("Mạch bận, hãy thử lại.");
   }
 }, [selectedSubject]);
