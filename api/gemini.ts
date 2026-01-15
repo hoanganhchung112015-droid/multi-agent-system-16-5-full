@@ -1,32 +1,35 @@
-{
-  "name": "ai-teacher-app",
-  "private": true,
-  "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-markdown": "^9.0.1",
-    "remark-math": "^6.0.0",
-    "rehype-katex": "^7.0.0",
-    "katex": "^0.16.11",
-    "lucide-react": "^0.446.0",
-    "clsx": "^2.1.1",
-    "tailwind-merge": "^2.5.2"
-  },
-  "devDependencies": {
-    "@types/react": "^18.3.10",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.2",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.47",
-    "tailwindcss": "^3.4.13",
-    "typescript": "^5.5.3",
-    "vite": "^5.4.8"
+export const config = { runtime: 'edge' };
+
+export default async function handler(req: Request) {
+  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  try {
+    const { subject, prompt, image, agent } = await req.json();
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    const isSpeed = agent === 'SPEED';
+    const systemInstruction = isSpeed 
+      ? `Trả về JSON: {"finalAnswer": "đáp án toán học kèm LaTeX"}. Không giải thích, không Casio.` 
+      : `Bạn là giáo viên môn ${subject}. Giải chi tiết bài tập theo phong cách luyện tập kỹ năng.`;
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: `${systemInstruction}\nNội dung: ${prompt}` },
+            ...(image ? [{ inlineData: { mimeType: "image/jpeg", data: image.split(",")[1] || image } }] : [])
+          ]
+        }],
+        generationConfig: { temperature: 0.1, ...(isSpeed ? { responseMimeType: "application/json" } : {}) }
+      })
+    });
+
+    const data = await response.json();
+    const result = data.candidates?.[0]?.content?.parts?.[0]?.text || "Không có phản hồi";
+    return new Response(result, { headers: { 'Content-Type': 'application/json' } });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: 'Mạch bận' }), { status: 500 });
   }
 }
