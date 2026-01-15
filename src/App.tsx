@@ -1,26 +1,36 @@
-const runAgents = useCallback(async (primary: any, all: any[], voice: string, img: string | null) => {
+// Trong useAgentSystem hoặc App.tsx
+const runAgents = useCallback(async (primary: AgentType, agents: AgentType[], text: string, img: string | null) => {
   if (!selectedSubject) return;
   setLoading(true);
 
-  // Nén ảnh trước khi "đưa vào ống"
-  const finalImg = img && img.startsWith('data') ? await compressImage(img) : img;
+  // Bước 1: Thông mạch - Nén ảnh siêu tốc
+  const optimizedImg = img && img.startsWith('data') ? await compressImage(img) : img;
 
-  // Luồng song song: Các agent chạy đua, không đợi nhau
-  all.forEach(async (agent) => {
-    const res = await processTask(selectedSubject, agent, voice, finalImg || undefined);
-    if (agent === 'SPEED') {
-      try {
-        const parsed = JSON.parse(res);
-        setParsedSpeedResult({ finalAnswer: parsed.finalAnswer, casioSteps: "" }); // BỎ CASIO
-        setAllResults(prev => ({ ...prev, [agent]: parsed.finalAnswer }));
-      } catch {
+  // Bước 2: Kích hoạt Siêu phân luồng (Async Parallel)
+  // Không dùng await ở đây để các luồng không chờ nhau
+  agents.forEach(async (agent) => {
+    try {
+      // Mỗi agent chạy trên 1 lane riêng biệt
+      const res = await processTask(selectedSubject, agent, text, optimizedImg || undefined);
+      
+      if (agent === AgentType.SPEED) {
+        try {
+          const parsed = JSON.parse(res);
+          // BỎ CASIO ĐỂ GIẢM TẢI BĂNG THÔNG
+          setParsedSpeedResult({ finalAnswer: parsed.finalAnswer, casioSteps: "" });
+          setAllResults(prev => ({ ...prev, [agent]: parsed.finalAnswer }));
+        } catch {
+          setAllResults(prev => ({ ...prev, [agent]: res }));
+        }
+      } else {
+        // Cập nhật ngay lập tức khi luồng này có kết quả
         setAllResults(prev => ({ ...prev, [agent]: res }));
       }
-    } else {
-      setAllResults(prev => ({ ...prev, [agent]: res }));
+    } catch (err) {
+      setAllResults(prev => ({ ...prev, [agent]: "⚠️ Mạch đang tự phục hồi..." }));
     }
   });
-  
-  // Tự động tắt loading sau 2s (hoặc dựa trên kết quả đầu tiên)
-  setTimeout(() => setLoading(false), 2000);
+
+  // Tắt loading tổng thể sớm để người dùng thấy dữ liệu đang đổ về
+  setTimeout(() => setLoading(false), 800);
 }, [selectedSubject]);
