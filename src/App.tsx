@@ -1,53 +1,26 @@
-// --- Tìm và thay thế hàm runAgents trong App.tsx ---
-const runAgents = useCallback(async (
-  primaryAgent: AgentType,
-  allAgents: AgentType[],
-  voiceText: string,
-  image: string | null
-) => {
+const runAgents = useCallback(async (primary: any, all: any[], voice: string, img: string | null) => {
   if (!selectedSubject) return;
-
   setLoading(true);
-  setLoadingStatus("Đang phân luồng chuyên gia...");
 
-  // LUỒNG XỬ LÝ SONG SONG (Thông suốt tuyệt đối)
-  const taskPool = allAgents.map(async (agent) => {
-    try {
-      const res = await processTask(selectedSubject, agent, voiceText, image || undefined);
-      
-      if (agent === AgentType.SPEED) {
-        try {
-          const parsed = JSON.parse(res);
-          // CHỈ LẤY ĐÁP ÁN, BỎ CASIO ĐỂ TĂNG TỐC
-          setParsedSpeedResult({ finalAnswer: parsed.finalAnswer, casioSteps: "" });
-          setAllResults(prev => ({ ...prev, [agent]: parsed.finalAnswer }));
-        } catch (e) {
-          setAllResults(prev => ({ ...prev, [agent]: res }));
-        }
-      } else {
+  // Nén ảnh trước khi "đưa vào ống"
+  const finalImg = img && img.startsWith('data') ? await compressImage(img) : img;
+
+  // Luồng song song: Các agent chạy đua, không đợi nhau
+  all.forEach(async (agent) => {
+    const res = await processTask(selectedSubject, agent, voice, finalImg || undefined);
+    if (agent === 'SPEED') {
+      try {
+        const parsed = JSON.parse(res);
+        setParsedSpeedResult({ finalAnswer: parsed.finalAnswer, casioSteps: "" }); // BỎ CASIO
+        setAllResults(prev => ({ ...prev, [agent]: parsed.finalAnswer }));
+      } catch {
         setAllResults(prev => ({ ...prev, [agent]: res }));
       }
-    } catch (err) {
-      setAllResults(prev => ({ ...prev, [agent]: "⚠️ Đang thử kết nối lại mạch..." }));
+    } else {
+      setAllResults(prev => ({ ...prev, [agent]: res }));
     }
   });
-
-  // Chạy đồng thời tất cả các mạch
-  Promise.all(taskPool).finally(() => {
-    setLoading(false);
-    setLoadingStatus("");
-  });
-
+  
+  // Tự động tắt loading sau 2s (hoặc dựa trên kết quả đầu tiên)
+  setTimeout(() => setLoading(false), 2000);
 }, [selectedSubject]);
-
-// Cập nhật hàm bấm nút Giải bài để nén ảnh trước khi đi
-const handleRunAnalysis = useCallback(async () => {
-    if (!selectedSubject || (!image && !voiceText)) return;
-    
-    setScreen('ANALYSIS');
-    let optimizedImage = image;
-    if (image && image.startsWith('data:image')) {
-        optimizedImage = await compressImage(image); // Nén ảnh "thông mạch"
-    }
-    runAgents(selectedAgent, agents, voiceText, optimizedImage);
-}, [selectedSubject, image, voiceText, selectedAgent, agents, runAgents]);
