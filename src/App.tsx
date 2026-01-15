@@ -1,3 +1,5 @@
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+// ... các dòng import khác giữ nguyên
 const runAgents = useCallback(async (primary: AgentType, all: AgentType[], text: string, img: string | null) => {
   if (!selectedSubject) return;
   setLoading(true);
