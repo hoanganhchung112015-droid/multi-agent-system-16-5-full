@@ -1,36 +1,36 @@
-// Trong useAgentSystem hoặc App.tsx
-const runAgents = useCallback(async (primary: AgentType, agents: AgentType[], text: string, img: string | null) => {
+// Sửa hàm runAgents để tạo siêu phân luồng
+const runAgents = useCallback(async (primary: any, allAgents: any[], text: string, img: string | null) => {
   if (!selectedSubject) return;
   setLoading(true);
 
-  // Bước 1: Thông mạch - Nén ảnh siêu tốc
+  // 1. Nén ảnh siêu tốc để "thông ống" (chỉ tốn vài ms)
   const optimizedImg = img && img.startsWith('data') ? await compressImage(img) : img;
 
-  // Bước 2: Kích hoạt Siêu phân luồng (Async Parallel)
-  // Không dùng await ở đây để các luồng không chờ nhau
-  agents.forEach(async (agent) => {
+  // 2. KÍCH HOẠT SIÊU PHÂN LUỒNG: Các luồng chạy độc lập
+  allAgents.forEach(async (agent) => {
     try {
-      // Mỗi agent chạy trên 1 lane riêng biệt
-      const res = await processTask(selectedSubject, agent, text, optimizedImg || undefined);
-      
-      if (agent === AgentType.SPEED) {
+      const res = await fetch('/api/gemini', {
+        method: 'POST',
+        body: JSON.stringify({ subject: selectedSubject, agent, prompt: text, image: optimizedImg })
+      }).then(r => r.text());
+
+      if (agent === 'SPEED') {
         try {
           const parsed = JSON.parse(res);
-          // BỎ CASIO ĐỂ GIẢM TẢI BĂNG THÔNG
-          setParsedSpeedResult({ finalAnswer: parsed.finalAnswer, casioSteps: "" });
+          setParsedSpeedResult({ finalAnswer: parsed.finalAnswer, casioSteps: "" }); // Đã bỏ Casio
           setAllResults(prev => ({ ...prev, [agent]: parsed.finalAnswer }));
         } catch {
           setAllResults(prev => ({ ...prev, [agent]: res }));
         }
       } else {
-        // Cập nhật ngay lập tức khi luồng này có kết quả
+        // Cập nhật kết quả ngay khi luồng đó "về đích"
         setAllResults(prev => ({ ...prev, [agent]: res }));
       }
-    } catch (err) {
-      setAllResults(prev => ({ ...prev, [agent]: "⚠️ Mạch đang tự phục hồi..." }));
+    } catch {
+      setAllResults(prev => ({ ...prev, [agent]: "⚠️ Đang thử lại..." }));
     }
   });
 
-  // Tắt loading tổng thể sớm để người dùng thấy dữ liệu đang đổ về
-  setTimeout(() => setLoading(false), 800);
+  // Tắt loading sớm để giao diện mượt mà
+  setTimeout(() => setLoading(false), 1000);
 }, [selectedSubject]);
