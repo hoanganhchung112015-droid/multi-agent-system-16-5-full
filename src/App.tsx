@@ -50,3 +50,4 @@ const runAgents = useCallback(async (primary: AgentType, all: AgentType[], text:
   
   setLoadingStatus(""); 
 }, [selectedSubject]);
+export default App;
