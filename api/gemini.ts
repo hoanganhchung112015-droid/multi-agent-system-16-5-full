@@ -1,35 +1,69 @@
-export const config = { runtime: 'edge' };
+// --- File: api/gemini.ts ---
+export const config = {
+  runtime: 'edge',
+};
 
-export default async function handler(req: Request) {
-  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+export default async function (req: Request) {
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+  }
+
+  // 1. Lấy Google API Key từ biến môi trường
+  const apiKey = process.env.VITE_GEMINI_API_KEY;
+
+  if (!apiKey) {
+    return new Response(JSON.stringify({ error: 'Thiếu Gemini API Key' }), { status: 500 });
+  }
 
   try {
-    const { subject, prompt, image, agent } = await req.json();
-    const apiKey = process.env.GEMINI_API_KEY;
+    const { subject, prompt, image } = await req.json();
 
-    const isSpeed = agent === 'SPEED';
-    const systemInstruction = isSpeed 
-      ? `Trả về JSON: {"finalAnswer": "đáp án toán học kèm LaTeX"}. Không giải thích, không Casio.` 
-      : `Bạn là giáo viên môn ${subject}. Giải chi tiết bài tập theo phong cách luyện tập kỹ năng.`;
+    // 2. Cấu trúc lại dữ liệu gửi sang Google Gemini API
+    const contents = [
+      {
+        parts: [
+          { text: `Bạn là giáo viên chuyên nghiệp. Trả về JSON chính xác cấu trúc này: { "speed": { "answer": "đáp án", "similar": { "question": "câu hỏi", "options": ["A", "B", "C", "D"], "correctIndex": 0 } }, "socratic_hint": "gợi ý", "core_concept": "khái niệm" }. Môn ${subject}: ${prompt}` },
+          // Nếu có ảnh (Base64), thêm vào để Gemini quét
+          ...(image ? [{
+            inlineData: {
+              mimeType: "image/jpeg",
+              data: image.includes(",") ? image.split(",")[1] : image
+            }
+          }] : [])
+        ]
+      }
+    ];
 
+    // 3. Gọi API của Google Gemini
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: `${systemInstruction}\nNội dung: ${prompt}` },
-            ...(image ? [{ inlineData: { mimeType: "image/jpeg", data: image.split(",")[1] || image } }] : [])
-          ]
-        }],
-        generationConfig: { temperature: 0.1, ...(isSpeed ? { responseMimeType: "application/json" } : {}) }
+        contents,
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.1
+        }
       })
     });
 
     const data = await response.json();
-    const result = data.candidates?.[0]?.content?.parts?.[0]?.text || "Không có phản hồi";
-    return new Response(result, { headers: { 'Content-Type': 'application/json' } });
+
+    // 4. Lấy nội dung text từ phản hồi của Gemini
+    if (!data.candidates || !data.candidates[0]) {
+       return new Response(JSON.stringify({ error: 'Không nhận được phản hồi từ AI' }), { status: 500 });
+    }
+
+    const content = data.candidates[0].content.parts[0].text;
+    
+    return new Response(content, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
   } catch (err) {
-    return new Response(JSON.stringify({ error: 'Mạch bận' }), { status: 500 });
+    console.error("Lỗi Server:", err);
+    return new Response(JSON.stringify({ error: 'Lỗi máy chủ khi xử lý Gemini' }), { status: 500 });
   }
 }
